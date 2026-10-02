@@ -260,3 +260,5 @@ Note: the summary above is a project artifact and is therefore written in Englis
 - When a direct user instruction conflicts with this file: **name the specific clause in conflict first**, then proceed according to the user's explicit reaffirmation.
 - For situations this file does not cover: choose the option most consistent with the existing codebase, and record that judgement in section 4 of the commit summary.
 - Changes to the rules in this file **MUST** be initiated by the user. The agent **MUST NOT** relax a constraint on its own.
+
+ NEVER execute `git commit` or `git push` automatically. Always leave git operations to the user.

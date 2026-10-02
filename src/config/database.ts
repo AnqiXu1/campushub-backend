@@ -4,7 +4,8 @@
  */
 import mongoose from "mongoose";
 
-export type DatabaseState = "disconnected" | "connected" | "connecting" | "disconnecting" | "unknown";
+export type DatabaseState =
+  "disconnected" | "connected" | "connecting" | "disconnecting" | "unknown";
 
 const DATABASE_STATES: Readonly<Record<number, DatabaseState>> = {
   0: "disconnected",

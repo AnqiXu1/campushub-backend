@@ -1,0 +1,400 @@
+openapi: 3.0.3
+
+info:
+  title: CampusHub Reservation API
+  version: 1.0.0
+  license:
+    name: ISC
+    url: https://opensource.org/licenses/ISC
+  description: >
+    API specification for managing campus resources and time-slotted reservations.
+
+    Every endpoint answers with one of exactly two envelopes: a success envelope
+    `{ "success": true, "data": ... }` or an error envelope
+    `{ "success": false, "error": { "code": ..., "message": ... } }`.
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local Development Server
+
+# The reservation engine is unauthenticated at this stage of the project.
+# An empty root-level requirement states that explicitly rather than leaving
+# the question open; a scheme is added here once auth lands.
+security: []
+
+tags:
+  - name: Health
+    description: Service liveness and database connection state.
+  - name: Resources
+    description: Bookable campus resources.
+  - name: Reservations
+    description: Time-slotted reservations placed against a resource.
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Report service health
+      description: Returns process uptime and the current MongoDB connection state.
+      responses:
+        "200":
+          description: The service is reachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /resources:
+    get:
+      tags: [Resources]
+      operationId: listResources
+      summary: List all resources
+      description: >
+        Returns every campus resource. When `type` is supplied the list is
+        filtered to resources of that type. An unknown type is not an error:
+        it simply yields an empty list.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: >
+            Case-insensitive resource type filter. Must be a non-empty string
+            when present; an empty value is rejected with 400. The filter is
+            deliberately typed as a free-form string rather than an enum so that
+            an unrecognised type returns an empty list instead of a validation error.
+          schema:
+            type: string
+            minLength: 1
+          example: ROOM
+      responses:
+        "200":
+          description: The matching resources.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /reservations:
+    post:
+      tags: [Reservations]
+      operationId: createReservation
+      summary: Create a new reservation
+      description: >
+        Books a resource for a time block. The reservation is created with
+        status `PENDING`. The request is rejected with 409 when the resource
+        already holds a non-cancelled reservation overlapping the requested block.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+      responses:
+        "201":
+          description: The reservation was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The booking cannot be made: either the resource already holds a
+            non-cancelled reservation overlapping the requested block
+            (`DOUBLE_BOOKING`), or the resource is closed for booking
+            (`RESOURCE_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                error:
+                  code: DOUBLE_BOOKING
+                  message: Resource is already reserved for this time slot.
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /reservations/user/{userId}:
+    get:
+      tags: [Reservations]
+      operationId: listUserReservations
+      summary: Fetch all active reservations for a given student
+      description: >
+        Returns the caller's reservations whose status is `PENDING` or
+        `CONFIRMED`, ordered by start time. Cancelled reservations are excluded.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: The student user identifier.
+          schema:
+            type: string
+            minLength: 1
+          example: user-456
+      responses:
+        "200":
+          description: The user's active reservations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+components:
+  responses:
+    BadRequest:
+      description: The request failed input validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            error:
+              code: VALIDATION_ERROR
+              message: type must be a non-empty string when provided.
+
+    NotFound:
+      description: The referenced entity does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            error:
+              code: NOT_FOUND
+              message: "Resource not found: res-999"
+
+    InternalServerError:
+      description: An unexpected server error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            success: false
+            error:
+              code: INTERNAL_SERVER_ERROR
+              message: An unexpected error occurred.
+
+  schemas:
+    ResourceType:
+      type: string
+      description: The category of a bookable campus resource.
+      enum: [ROOM, EQUIPMENT, LAB]
+
+    ReservationStatus:
+      type: string
+      description: Lifecycle state of a reservation.
+      enum: [PENDING, CONFIRMED, CANCELLED]
+
+    UserRole:
+      type: string
+      description: Authorisation role attached to a campus account.
+      enum: [STUDENT, STAFF, ADMIN]
+
+    User:
+      type: object
+      description: A campus account that can place reservations.
+      additionalProperties: false
+      required: [id, email, fullName, role]
+      properties:
+        id:
+          type: string
+          description: Stable unique identifier.
+          example: user-456
+        email:
+          type: string
+          format: email
+          example: student@campushub.edu
+        fullName:
+          type: string
+          minLength: 1
+          example: Jordan Lee
+        role:
+          $ref: "#/components/schemas/UserRole"
+
+    Resource:
+      type: object
+      description: A bookable campus resource.
+      additionalProperties: false
+      required: [id, name, type, location, isAvailable]
+      properties:
+        id:
+          type: string
+          description: Stable unique identifier.
+          example: res-101
+        name:
+          type: string
+          minLength: 1
+          example: Study Room 302
+        type:
+          $ref: "#/components/schemas/ResourceType"
+        location:
+          type: string
+          minLength: 1
+          example: Snell Library, Floor 3
+        isAvailable:
+          type: boolean
+          description: Whether the resource is currently open for booking.
+          example: true
+
+    Reservation:
+      type: object
+      description: A time-slotted booking of a resource by a user.
+      additionalProperties: false
+      required: [id, resourceId, userId, startTime, endTime, status]
+      properties:
+        id:
+          type: string
+          example: 2f1c5a6e-9f4b-4a0d-8f3c-77a9b1d2e4c8
+        resourceId:
+          type: string
+          description: Identifier of the reserved resource.
+          example: res-101
+        userId:
+          type: string
+          description: Identifier of the reserving user.
+          example: user-456
+        startTime:
+          type: string
+          format: date-time
+          description: Inclusive start of the block, as an ISO 8601 date-time string.
+          example: "2026-10-01T10:00:00Z"
+        endTime:
+          type: string
+          format: date-time
+          description: Exclusive end of the block, as an ISO 8601 date-time string.
+          example: "2026-10-01T11:00:00Z"
+        status:
+          $ref: "#/components/schemas/ReservationStatus"
+
+    CreateReservationRequest:
+      type: object
+      description: >
+        Payload accepted by POST /reservations. `id` and `status` are assigned
+        by the server and must not be supplied by the client.
+      additionalProperties: false
+      required: [resourceId, userId, startTime, endTime]
+      properties:
+        resourceId:
+          type: string
+          minLength: 1
+          example: res-101
+        userId:
+          type: string
+          minLength: 1
+          example: user-456
+        startTime:
+          type: string
+          format: date-time
+          example: "2026-10-01T10:00:00Z"
+        endTime:
+          type: string
+          format: date-time
+          example: "2026-10-01T11:00:00Z"
+
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status, uptimeSeconds, database, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        uptimeSeconds:
+          type: integer
+          minimum: 0
+          example: 42
+        database:
+          type: string
+          enum: [disconnected, connected, connecting, disconnecting, unknown]
+        timestamp:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: "#/components/schemas/HealthStatus"
+
+    ResourceListResponse:
+      type: object
+      additionalProperties: false
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Resource"
+
+    ReservationResponse:
+      type: object
+      additionalProperties: false
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: "#/components/schemas/Reservation"
+
+    ReservationListResponse:
+      type: object
+      additionalProperties: false
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reservation"
+
+    ErrorResponse:
+      type: object
+      description: The single failure envelope used by every endpoint.
+      additionalProperties: false
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: Stable, machine-readable error identifier.
+              example: DOUBLE_BOOKING
+            message:
+              type: string
+              description: Human-readable explanation, safe to show to a client.
+              example: Resource is already reserved for this time slot.
