@@ -3,12 +3,16 @@
  * in the background, retrying until it succeeds, and shut down gracefully.
  * The listener does not wait for the database, so the API stays reachable
  * (and /api/v1/health reports the real connection state) while MongoDB is down.
+ * With USE_IN_MEMORY_DB=true an in-memory MongoDB is started instead of using
+ * MONGO_URI, and the starter resource catalogue is seeded into it.
  */
 import type { Server } from "node:http";
 
 import { createApp } from "./app.ts";
 import { connectDatabase, disconnectDatabase } from "./config/database.ts";
 import { loadConfig, type AppConfig } from "./config/env.ts";
+import { startMemoryDatabase, stopMemoryDatabase } from "./config/memory-database.ts";
+import { seedResources } from "./services/resource.service.ts";
 
 const SHUTDOWN_SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
 const DATABASE_RETRY_DELAY_MS: number = 5000;
@@ -72,6 +76,7 @@ const shutdown = async (server: Server, signal: NodeJS.Signals): Promise<void> =
   try {
     await closeServer(server);
     await disconnectDatabase();
+    await stopMemoryDatabase();
     process.exit(0);
   } catch (error: unknown) {
     console.error("Error during shutdown:", error);
@@ -103,7 +108,14 @@ const startServer = async (): Promise<void> => {
 
   registerShutdownHandlers(server);
 
-  await connectDatabaseWithRetry(config.mongoUri);
+  if (config.database.kind === "memory") {
+    const memoryUri: string = await startMemoryDatabase();
+    await connectDatabaseWithRetry(memoryUri);
+    await seedResources();
+    console.log("Seeded the in-memory database with the starter resource catalogue.");
+    return;
+  }
+  await connectDatabaseWithRetry(config.database.mongoUri);
 };
 
 try {

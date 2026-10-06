@@ -1,15 +1,13 @@
 /**
- * Reservation business logic: overlap detection, status assignment and
- * per-user listing. No knowledge of HTTP; failures are raised as HttpError
- * instances that the global error middleware translates.
- *
- * Reservations are held in memory so the contract can be exercised locally
- * without a running MongoDB instance. src/models/reservation.model.ts already
- * carries the persistent shape and the indexes that back the overlap lookup.
+ * Reservation business logic and persistence: overlap detection, status
+ * assignment and per-user listing. No knowledge of HTTP; failures are raised
+ * as HttpError instances that the global error middleware translates.
+ * This is the only layer that touches ReservationModel.
  */
-import { randomUUID } from "node:crypto";
+import { Types } from "mongoose";
 
 import { badRequest, conflict, notFound } from "../errors/http-error.ts";
+import { ReservationModel, type IReservation } from "../models/reservation.model.ts";
 import { findResourceById } from "./resource.service.ts";
 import type { CreateReservationDto, Reservation, ReservationStatus } from "../types/reservation.ts";
 import type { Resource } from "../types/resource.ts";
@@ -20,17 +18,15 @@ const ACTIVE_STATUSES: readonly ReservationStatus[] = ["PENDING", "CONFIRMED"];
 /** Status given to every newly created reservation. */
 const INITIAL_STATUS: ReservationStatus = "PENDING";
 
-const reservations: Reservation[] = [];
-
-/** Half-open comparison: a block ending exactly when another starts is free. */
-const overlaps = (existing: Reservation, startTime: Date, endTime: Date): boolean => {
-  const existingStart: number = new Date(existing.startTime).getTime();
-  const existingEnd: number = new Date(existing.endTime).getTime();
-  return existingStart < endTime.getTime() && existingEnd > startTime.getTime();
-};
-
-const isActive = (reservation: Reservation): boolean => {
-  return ACTIVE_STATUSES.includes(reservation.status);
+const toReservation = (document: IReservation): Reservation => {
+  return {
+    id: document._id.toHexString(),
+    resourceId: document.resourceId.toHexString(),
+    userId: document.userId,
+    startTime: document.startTime.toISOString(),
+    endTime: document.endTime.toISOString(),
+    status: document.status,
+  };
 };
 
 export const createReservation = async (input: CreateReservationDto): Promise<Reservation> => {
@@ -49,41 +45,37 @@ export const createReservation = async (input: CreateReservationDto): Promise<Re
     throw conflict(`Resource is not open for booking: ${input.resourceId}`, "RESOURCE_UNAVAILABLE");
   }
 
-  const isDoubleBooked: boolean = reservations.some((existing: Reservation): boolean => {
-    return (
-      existing.resourceId === input.resourceId &&
-      isActive(existing) &&
-      overlaps(existing, startTime, endTime)
-    );
+  const resourceObjectId: Types.ObjectId = new Types.ObjectId(resource.id);
+
+  // Half-open comparison: a block ending exactly when another starts is free.
+  const clashing: Pick<IReservation, "_id"> | null = await ReservationModel.exists({
+    resourceId: resourceObjectId,
+    status: { $in: ACTIVE_STATUSES },
+    startTime: { $lt: endTime },
+    endTime: { $gt: startTime },
   });
-  if (isDoubleBooked) {
+  if (clashing !== null) {
     throw conflict("Resource is already reserved for this time slot.", "DOUBLE_BOOKING");
   }
 
-  const created: Reservation = {
-    id: randomUUID(),
-    resourceId: input.resourceId,
+  const created: IReservation = await ReservationModel.create({
+    resourceId: resourceObjectId,
     userId: input.userId,
-    // Normalised to UTC so stored values always match the contract's
-    // ISO 8601 date-time format regardless of the offset the client sent.
-    startTime: startTime.toISOString(),
-    endTime: endTime.toISOString(),
+    startTime,
+    endTime,
     status: INITIAL_STATUS,
-  };
-  reservations.push(created);
+  });
 
-  return created;
+  return toReservation(created);
 };
 
 /** Active reservations belonging to a user, earliest block first. */
 export const listActiveReservationsForUser = async (
   userId: string,
 ): Promise<readonly Reservation[]> => {
-  return reservations
-    .filter((reservation: Reservation): boolean => {
-      return reservation.userId === userId && isActive(reservation);
-    })
-    .sort((left: Reservation, right: Reservation): number => {
-      return new Date(left.startTime).getTime() - new Date(right.startTime).getTime();
-    });
+  const documents: IReservation[] = await ReservationModel.find({
+    userId,
+    status: { $in: ACTIVE_STATUSES },
+  }).sort({ startTime: 1 });
+  return documents.map(toReservation);
 };

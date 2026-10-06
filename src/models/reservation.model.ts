@@ -3,7 +3,7 @@
  * Fields correspond one-to-one with components/schemas/Reservation in
  * docs/openapi.yaml and with the Reservation type in src/types/reservation.ts.
  */
-import { Schema, model, type Document, type Model } from "mongoose";
+import { Schema, model, type Document, type Model, type Types } from "mongoose";
 
 import type { ReservationStatus } from "../types/reservation.ts";
 
@@ -14,8 +14,8 @@ export const RESERVATION_STATUSES = [
   "CANCELLED",
 ] as const satisfies readonly ReservationStatus[];
 
-export interface IReservation extends Document {
-  resourceId: string;
+export interface IReservation extends Document<Types.ObjectId> {
+  resourceId: Types.ObjectId;
   userId: string;
   startTime: Date;
   endTime: Date;
@@ -26,7 +26,7 @@ export interface IReservation extends Document {
 
 const reservationSchema: Schema<IReservation> = new Schema<IReservation>(
   {
-    resourceId: { type: String, required: true, trim: true },
+    resourceId: { type: Schema.Types.ObjectId, ref: "Resource", required: true },
     userId: { type: String, required: true, trim: true },
     startTime: { type: Date, required: true },
     endTime: { type: Date, required: true },

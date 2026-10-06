@@ -3,7 +3,7 @@
  * Fields correspond one-to-one with components/schemas/Resource in
  * docs/openapi.yaml and with the Resource type in src/types/resource.ts.
  */
-import { Schema, model, type Document, type Model } from "mongoose";
+import { Schema, model, type Document, type Model, type Types } from "mongoose";
 
 import type { ResourceType } from "../types/resource.ts";
 
@@ -14,7 +14,7 @@ export const RESOURCE_TYPES = [
   "LAB",
 ] as const satisfies readonly ResourceType[];
 
-export interface IResource extends Document {
+export interface IResource extends Document<Types.ObjectId> {
   name: string;
   type: ResourceType;
   location: string;
