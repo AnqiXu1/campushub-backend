@@ -35,3 +35,8 @@ export interface CreateReservationDto {
 export interface UserReservationsParams {
   readonly userId: string;
 }
+
+/** Validated path parameters of PATCH /reservations/{id}/cancel. */
+export interface CancelReservationParams {
+  readonly id: string;
+}

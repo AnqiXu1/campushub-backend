@@ -15,6 +15,12 @@ import type { Resource } from "../types/resource.ts";
 /** A reservation in one of these states still occupies its time block. */
 const ACTIVE_STATUSES: readonly ReservationStatus[] = ["PENDING", "CONFIRMED"];
 
+/** Canonical 24-character hexadecimal form of a MongoDB ObjectId. */
+const OBJECT_ID_PATTERN: RegExp = /^[0-9a-fA-F]{24}$/;
+
+/** Status a reservation moves to when it is cancelled; it releases the time block. */
+const CANCELLED_STATUS: ReservationStatus = "CANCELLED";
+
 /** Status given to every newly created reservation. */
 const INITIAL_STATUS: ReservationStatus = "PENDING";
 
@@ -78,4 +84,36 @@ export const listActiveReservationsForUser = async (
     status: { $in: ACTIVE_STATUSES },
   }).sort({ startTime: 1 });
   return documents.map(toReservation);
+};
+
+/**
+ * Moves an active reservation to CANCELLED, which frees its time block for
+ * future overlap checks. The status condition is part of the update filter, so
+ * two concurrent cancels cannot both succeed. A malformed id cannot match any
+ * document, so it is treated as not found.
+ */
+export const cancelReservation = async (reservationId: string): Promise<Reservation> => {
+  if (!OBJECT_ID_PATTERN.test(reservationId)) {
+    throw notFound(`Reservation not found: ${reservationId}`);
+  }
+  const reservationObjectId: Types.ObjectId = new Types.ObjectId(reservationId);
+
+  const updated: IReservation | null = await ReservationModel.findOneAndUpdate(
+    { _id: reservationObjectId, status: { $in: ACTIVE_STATUSES } },
+    { $set: { status: CANCELLED_STATUS } },
+    { returnDocument: "after" },
+  );
+  if (updated !== null) {
+    return toReservation(updated);
+  }
+
+  // Nothing was updated: distinguish a missing reservation from one that is
+  // already cancelled.
+  const existing: Pick<IReservation, "_id"> | null = await ReservationModel.exists({
+    _id: reservationObjectId,
+  });
+  if (existing === null) {
+    throw notFound(`Reservation not found: ${reservationId}`);
+  }
+  throw conflict("Reservation is already cancelled.", "INVALID_STATE_TRANSITION");
 };

@@ -23,4 +23,6 @@ export interface Resource {
  */
 export interface ListResourcesQuery {
   readonly type?: string | undefined;
+  /** When present, narrows the list to resources with this availability. */
+  readonly isAvailable?: boolean | undefined;
 }

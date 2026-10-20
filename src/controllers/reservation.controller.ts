@@ -7,6 +7,7 @@ import type { NextFunction, Request, Response } from "express";
 
 import { badRequest } from "../errors/http-error.ts";
 import {
+  cancelReservation as cancelReservationRecord,
   createReservation as createReservationRecord,
   listActiveReservationsForUser,
 } from "../services/reservation.service.ts";
@@ -73,5 +74,17 @@ export const getUserReservations = async (
   const userId: string = parseRequiredString(req.params["userId"], "userId");
   const reservations: readonly Reservation[] = await listActiveReservationsForUser(userId);
   const body: SuccessResponse<readonly Reservation[]> = { success: true, data: reservations };
+  res.status(200).json(body);
+};
+
+/** PATCH /api/v1/reservations/:id/cancel */
+export const cancelReservation = async (
+  req: Request,
+  res: Response,
+  _next: NextFunction,
+): Promise<void> => {
+  const reservationId: string = parseRequiredString(req.params["id"], "id");
+  const reservation: Reservation = await cancelReservationRecord(reservationId);
+  const body: SuccessResponse<Reservation> = { success: true, data: reservation };
   res.status(200).json(body);
 };

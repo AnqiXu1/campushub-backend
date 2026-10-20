@@ -5,10 +5,15 @@
  */
 import { Router } from "express";
 
-import { createReservation, getUserReservations } from "../controllers/reservation.controller.ts";
+import {
+  cancelReservation,
+  createReservation,
+  getUserReservations,
+} from "../controllers/reservation.controller.ts";
 import { asyncHandler } from "../middlewares/async-handler.ts";
 
 export const reservationRouter: Router = Router();
 
 reservationRouter.post("/", asyncHandler(createReservation));
 reservationRouter.get("/user/:userId", asyncHandler(getUserReservations));
+reservationRouter.patch("/:id/cancel", asyncHandler(cancelReservation));

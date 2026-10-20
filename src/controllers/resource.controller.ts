@@ -23,8 +23,28 @@ const parseOptionalStringParam = (value: unknown, field: string): string | undef
   return value.trim();
 };
 
+/**
+ * Accepts an absent parameter, or the exact strings "true" / "false".
+ * Anything else is rejected, matching the boolean schema in docs/openapi.yaml.
+ */
+const parseOptionalBooleanParam = (value: unknown, field: string): boolean | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  throw badRequest(`${field} must be either "true" or "false" when provided.`, "VALIDATION_ERROR");
+};
+
 const parseListResourcesQuery = (query: Request["query"]): ListResourcesQuery => {
-  return { type: parseOptionalStringParam(query["type"], "type") };
+  return {
+    type: parseOptionalStringParam(query["type"], "type"),
+    isAvailable: parseOptionalBooleanParam(query["isAvailable"], "isAvailable"),
+  };
 };
 
 /** GET /api/v1/resources */

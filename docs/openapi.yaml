@@ -55,7 +55,8 @@ paths:
       description: >
         Returns every campus resource. When `type` is supplied the list is
         filtered to resources of that type. An unknown type is not an error:
-        it simply yields an empty list.
+        it simply yields an empty list. When `isAvailable` is supplied the
+        list is filtered by availability. Both filters may be combined.
       parameters:
         - name: type
           in: query
@@ -69,6 +70,15 @@ paths:
             type: string
             minLength: 1
           example: ROOM
+        - name: isAvailable
+          in: query
+          required: false
+          description: >
+            Availability filter. Must be exactly `true` or `false` when
+            present; any other value is rejected with 400.
+          schema:
+            type: boolean
+          example: true
       responses:
         "200":
           description: The matching resources.
@@ -151,6 +161,59 @@ paths:
                 $ref: "#/components/schemas/ReservationListResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+
+  /reservations/{id}/cancel:
+    patch:
+      tags: [Reservations]
+      operationId: cancelReservation
+      summary: Cancel a reservation
+      description: >
+        Transitions a `PENDING` or `CONFIRMED` reservation to `CANCELLED`,
+        which immediately frees its time block for new bookings. Cancelling a
+        reservation that is already cancelled is rejected with 409. No request
+        body is required.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The reservation identifier.
+          schema:
+            type: string
+            minLength: 1
+          example: 2f1c5a6e-9f4b-4a0d-8f3c-77a9b1d2e4c8
+      responses:
+        "200":
+          description: The reservation, now with status `CANCELLED`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: No reservation exists with the given id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                error:
+                  code: NOT_FOUND
+                  message: "Reservation not found: 2f1c5a6e-9f4b-4a0d-8f3c-77a9b1d2e4c8"
+        "409":
+          description: The reservation is already cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                success: false
+                error:
+                  code: INVALID_STATE_TRANSITION
+                  message: Reservation is already cancelled.
         "500":
           $ref: "#/components/responses/InternalServerError"
 

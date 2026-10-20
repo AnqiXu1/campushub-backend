@@ -3,7 +3,7 @@
  * This is the only layer that touches ResourceModel; callers receive the
  * contract type from src/types/resource.ts, never a Mongoose document.
  */
-import { Types } from "mongoose";
+import { Types, type QueryFilter } from "mongoose";
 
 import { RESOURCE_TYPES, ResourceModel, type IResource } from "../models/resource.model.ts";
 import type { ListResourcesQuery, Resource, ResourceType } from "../types/resource.ts";
@@ -77,22 +77,26 @@ const isResourceType = (value: string): value is ResourceType => {
 };
 
 /**
- * Lists the catalogue, optionally narrowed by type. An unrecognised type is
- * not an error: it simply matches nothing, as the contract states.
+ * Lists the catalogue, optionally narrowed by type and availability. An
+ * unrecognised type is not an error: it simply matches nothing, as the
+ * contract states. The filter is built field by field from validated values.
  */
 export const listResources = async (query: ListResourcesQuery): Promise<readonly Resource[]> => {
-  if (query.type === undefined) {
-    const documents: IResource[] = await ResourceModel.find().sort({ _id: 1 });
-    return documents.map(toResource);
+  const filter: QueryFilter<IResource> = {};
+
+  if (query.type !== undefined) {
+    const normalizedType: string = query.type.toUpperCase();
+    if (!isResourceType(normalizedType)) {
+      return [];
+    }
+    filter.type = normalizedType;
   }
 
-  const normalizedType: string = query.type.toUpperCase();
-  if (!isResourceType(normalizedType)) {
-    return [];
+  if (query.isAvailable !== undefined) {
+    filter.isAvailable = query.isAvailable;
   }
-  const documents: IResource[] = await ResourceModel.find({ type: normalizedType }).sort({
-    _id: 1,
-  });
+
+  const documents: IResource[] = await ResourceModel.find(filter).sort({ _id: 1 });
   return documents.map(toResource);
 };
 
