@@ -64,6 +64,16 @@ Only the following libraries are permitted:
 | Type declarations | `@types/node`, `@types/express` |
 | Code quality | `eslint`, `prettier` |
 
+The whitelist also covers the frontend in `client/` (see §7). Approved additions, scoped to `client/package.json` only:
+
+| Purpose | Authorized package |
+| --- | --- |
+| UI framework | `react`, `react-dom` |
+| Build tooling | `vite`, `@vitejs/plugin-react` |
+| Type declarations | `@types/react`, `@types/react-dom` |
+
+The frontend API layer uses the native `fetch` API and styling uses CSS Modules; `axios`, Tailwind, and any other package remain unauthorized.
+
 ### 2.2 Rules
 
 - **MUST NOT** add any npm dependency outside the table above. If one is genuinely required: **stop coding**, state in the reply which package is needed, what it is for, and why the existing dependencies cannot cover it, then wait for the user's approval before installing.
@@ -262,3 +272,42 @@ Note: the summary above is a project artifact and is therefore written in Englis
 - Changes to the rules in this file **MUST** be initiated by the user. The agent **MUST NOT** relax a constraint on its own.
 
  NEVER execute `git commit` or `git push` automatically. Always leave git operations to the user.
+
+---
+
+## 7. Frontend Guidelines (`client/`)
+
+The React client lives in `client/` as an independent package (`client/package.json`, `client/tsconfig*.json`). It consumes the backend only through the contract in `docs/openapi.yaml`. Every rule in §1, §2.2 and §4 applies to it as well: English-only artifacts, no `any`, no `!`, no `@ts-ignore`, explicit parameter and return types, strict `tsconfig`, `.ts` / `.tsx` sources only, and relative imports with the real file extension (`./App.tsx`, `../api/campushubApi.ts`).
+
+### 7.1 Component architecture
+
+- **MUST** use functional components only. **MUST NOT** write class components.
+- **MUST** declare an explicit props interface for every component (e.g. `ResourceListProps`), even when it is empty, and annotate the component's return type as `ReactElement`.
+- One component per file in `client/src/components/`, named in `PascalCase.tsx`, with its stylesheet beside it as `PascalCase.module.css`.
+
+### 7.2 State management
+
+- **MUST** use standard React hooks (`useState`, `useEffect`, `useCallback`, `useMemo`) or custom hooks under `client/src/hooks/`. **MUST NOT** add a state-management library.
+- **MUST NOT** call `fetch` or any API function inline in JSX or in render. Data loading and mutations live in hooks or event handlers, and components render the resulting state.
+- Every async workflow **MUST** expose explicit `isLoading` and `error` state. A loading flag **MUST** be cleared in a `finally` block so it can never hang, and `catch (error: unknown)` **MUST** narrow the error before use.
+- A `useEffect` that starts a request **MUST** cancel it on cleanup with an `AbortController`.
+- A 409 response **MUST** surface the server's error message in an explicit alert; it **MUST NOT** fail silently.
+
+### 7.3 API layer
+
+- All HTTP access goes through `client/src/api/campushubApi.ts`, which uses the native `fetch` API and the relative base path `/api/v1`. Components **MUST NOT** build URLs themselves.
+- Request and response types live in `client/src/types/` and mirror `docs/openapi.yaml` field for field.
+- The dev server proxies `/api` to the backend (`client/vite.config.ts`), so the browser stays on one origin. **MUST NOT** add CORS middleware to the backend to work around this.
+
+### 7.4 Styling
+
+- **MUST** use CSS Modules (`*.module.css`) for component styles. Global CSS is limited to `client/src/index.css`.
+- **MUST NOT** use inline `style` objects for anything other than a value computed at runtime.
+
+### 7.5 Scripts
+
+| Command (run in `client/`) | Action |
+| --- | --- |
+| `npm run dev` | Vite dev server with the `/api` proxy |
+| `npm run build` | `tsc -b && vite build` |
+| `npm run typecheck` | `tsc -b` |

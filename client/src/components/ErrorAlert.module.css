@@ -1,0 +1,21 @@
+.alert {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid #f1b0b7;
+  border-radius: 6px;
+  background: #fdecee;
+  color: #8a1c28;
+  font-size: 0.9rem;
+}
+
+.conflict {
+  border-color: #f5c26b;
+  background: #fff4de;
+  color: #8a5a00;
+}
+
+.title {
+  font-weight: 600;
+}
