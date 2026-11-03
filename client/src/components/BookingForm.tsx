@@ -2,6 +2,7 @@ import { useState, type ChangeEvent, type FormEvent, type ReactElement } from "r
 
 import { useCreateReservation } from "../hooks/use-create-reservation.ts";
 import type { Reservation, Resource } from "../types/api.ts";
+import { validateBooking, type BookingFormErrors } from "../utils/booking-validation.ts";
 import ErrorAlert from "./ErrorAlert.tsx";
 import styles from "./BookingForm.module.css";
 
@@ -11,34 +12,10 @@ interface BookingFormProps {
   readonly onBooked: (reservation: Reservation) => void;
 }
 
-interface FormErrors {
-  readonly startTime?: string | undefined;
-  readonly endTime?: string | undefined;
-}
-
-/** Validates the raw datetime-local values; returns an empty object when valid. */
-const validate = (startValue: string, endValue: string, now: number): FormErrors => {
-  const startMs: number = Date.parse(startValue);
-  const endMs: number = Date.parse(endValue);
-  const startError: string | undefined =
-    startValue === "" || Number.isNaN(startMs)
-      ? "Start time is required."
-      : startMs < now
-        ? "Start time must not be in the past."
-        : undefined;
-  const endError: string | undefined =
-    endValue === "" || Number.isNaN(endMs)
-      ? "End time is required."
-      : startError === undefined && endMs <= startMs
-        ? "End time must be after the start time."
-        : undefined;
-  return { startTime: startError, endTime: endError };
-};
-
 const BookingForm = ({ resource, userId, onBooked }: BookingFormProps): ReactElement => {
   const [startValue, setStartValue] = useState<string>("");
   const [endValue, setEndValue] = useState<string>("");
-  const [fieldErrors, setFieldErrors] = useState<FormErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<BookingFormErrors>({});
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const { isLoading, error, submit, clearError } = useCreateReservation();
 
@@ -63,7 +40,7 @@ const BookingForm = ({ resource, userId, onBooked }: BookingFormProps): ReactEle
       return;
     }
     resetFeedback();
-    const errors: FormErrors = validate(startValue, endValue, Date.now());
+    const errors: BookingFormErrors = validateBooking(startValue, endValue, Date.now());
     setFieldErrors(errors);
     if (errors.startTime !== undefined || errors.endTime !== undefined) {
       return;

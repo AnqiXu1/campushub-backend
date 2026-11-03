@@ -8,10 +8,9 @@ Read this file in full before writing a single line of code in this repository.
 
 ## 0. Project Context
 
-CampusHub backend: a REST API built on Node.js + TypeScript + Express + MongoDB (Mongoose).
+CampusHub: a REST API built on Node.js + TypeScript + Express + MongoDB (Mongoose), plus a React client in `client/`. Resources, reservations and health are implemented.
 
-Current state: project scaffold. Dependencies are installed; no business code exists yet.
-All new code MUST comply with the rules below from the first commit. "Make it work now, refactor later" is not an accepted exception.
+All new code MUST comply with the rules below. "Make it work now, refactor later" is not an accepted exception.
 
 Confirmed toolchain configuration:
 - `package.json` → `"type": "module"` (native ESM), entry point `dist/index.js`
@@ -153,6 +152,8 @@ These exist already and **MUST** be reused rather than reinvented:
 | `src/middlewares/async-handler.ts` | `asyncHandler()` — the mandated wrapper for every async controller |
 | `src/middlewares/error-handler.ts` | the global error middleware; the only place an error becomes an HTTP response |
 | `src/middlewares/not-found.ts` | the unmatched-route handler |
+| `src/controllers/request-parsers.ts` | `parseRequiredString` / `parseOptionalStringParam` / `parseOptionalBooleanParam` / `parseIsoDateTime` — the only request-input parsers; add new ones here, never per controller |
+| `src/controllers/send-success.ts` | `sendSuccess(res, status, data)` — the only way a controller writes a success response |
 | `src/routes/index.ts` | `apiRouter` — every new resource router is mounted here |
 | `src/app.ts` | `createApp()` — builds the app without opening a port |
 
@@ -213,7 +214,7 @@ Middleware order in `createApp()` is fixed: body parsers → routers → `notFou
 
 ### 5.1 Operational boundaries
 
-- **MUST NOT** run `git commit` or `git push` unless the user explicitly asks for it.
+- **MUST NOT** run `git commit` or `git push` on the agent's own initiative; leave git operations to the user and run them only on an explicit request.
 - **MUST NOT** use `git push --force`, `git reset --hard`, or `git rebase` to rewrite already-pushed history.
 - **MUST NOT** commit `node_modules/`, `dist/`, `.env`, logs, or temporary files.
 
@@ -271,8 +272,6 @@ Note: the summary above is a project artifact and is therefore written in Englis
 - For situations this file does not cover: choose the option most consistent with the existing codebase, and record that judgement in section 4 of the commit summary.
 - Changes to the rules in this file **MUST** be initiated by the user. The agent **MUST NOT** relax a constraint on its own.
 
- NEVER execute `git commit` or `git push` automatically. Always leave git operations to the user.
-
 ---
 
 ## 7. Frontend Guidelines (`client/`)
@@ -296,7 +295,7 @@ The React client lives in `client/` as an independent package (`client/package.j
 ### 7.3 API layer
 
 - All HTTP access goes through `client/src/api/campushubApi.ts`, which uses the native `fetch` API and the relative base path `/api/v1`. Components **MUST NOT** build URLs themselves.
-- Request and response types live in `client/src/types/` and mirror `docs/openapi.yaml` field for field.
+- Contract types (entities, DTOs, response envelopes) are defined once in `src/types/` and re-exported by `client/src/types/api.ts`. **MUST NOT** redeclare them in the client; add a new contract type to `src/types/` first. UI-only types live in `client/src/types/ui.ts`.
 - The dev server proxies `/api` to the backend (`client/vite.config.ts`), so the browser stays on one origin. **MUST NOT** add CORS middleware to the backend to work around this.
 
 ### 7.4 Styling
@@ -311,3 +310,12 @@ The React client lives in `client/` as an independent package (`client/package.j
 | `npm run dev` | Vite dev server with the `/api` proxy |
 | `npm run build` | `tsc -b && vite build` |
 | `npm run typecheck` | `tsc -b` |
+
+---
+
+## 8. Agent Context Hygiene
+
+- Work from source only: `src/`, `client/src/`, `docs/openapi.yaml`. **MUST NOT** read or search `dist/`, `client/dist/`, `node_modules/`, lockfiles, logs, source maps, or `coverage/`; they are excluded in `.ignore` and `.claude/settings.json`.
+- Read `docs/lab4-steering-log.md` only when asked about past steering incidents.
+- Keep files small: split a React component over ~150 lines (move state to a hook, pure logic to `client/src/utils/`) and keep one concern per module.
+- Before adding a helper, check §3.3 and `client/src/{hooks,utils}/` for an existing one.

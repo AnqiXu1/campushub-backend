@@ -1,54 +1,13 @@
 /**
- * Contract types mirroring docs/openapi.yaml field for field.
- * Type-only: no runtime values live in src/types.
+ * Contract types shared with the backend. The single source of truth is
+ * src/types/ (which mirrors docs/openapi.yaml); the client re-exports it so
+ * both sides of the HTTP boundary can never drift apart.
+ * Type-only: everything here is erased at compile time.
  */
-
-/** components/schemas/ResourceType */
-export type ResourceType = "ROOM" | "EQUIPMENT" | "LAB";
-
-/** components/schemas/ReservationStatus */
-export type ReservationStatus = "PENDING" | "CONFIRMED" | "CANCELLED";
-
-/** components/schemas/Resource */
-export interface Resource {
-  readonly id: string;
-  readonly name: string;
-  readonly type: ResourceType;
-  readonly location: string;
-  readonly isAvailable: boolean;
-}
-
-/** components/schemas/Reservation */
-export interface Reservation {
-  readonly id: string;
-  readonly resourceId: string;
-  readonly userId: string;
-  /** Inclusive start of the block, ISO 8601 date-time string. */
-  readonly startTime: string;
-  /** Exclusive end of the block, ISO 8601 date-time string. */
-  readonly endTime: string;
-  readonly status: ReservationStatus;
-}
-
-/** components/schemas/CreateReservationRequest */
-export interface CreateReservationDTO {
-  readonly resourceId: string;
-  readonly userId: string;
-  readonly startTime: string;
-  readonly endTime: string;
-}
-
-/** components/schemas/SuccessResponse envelope shared by every endpoint. */
-export interface SuccessEnvelope<TData> {
-  readonly success: true;
-  readonly data: TData;
-}
-
-/** components/schemas/ErrorResponse */
-export interface ErrorEnvelope {
-  readonly success: false;
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-  };
-}
+export type { ErrorResponse, SuccessResponse } from "../../../src/types/api.ts";
+export type {
+  CreateReservationDto,
+  Reservation,
+  ReservationStatus,
+} from "../../../src/types/reservation.ts";
+export type { Resource, ResourceType } from "../../../src/types/resource.ts";

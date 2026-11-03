@@ -1,7 +1,6 @@
 import type { ReactElement } from "react";
 
-import { useCancelReservation } from "../hooks/use-cancel-reservation.ts";
-import { useUserReservations } from "../hooks/use-user-reservations.ts";
+import { useReservations } from "../hooks/use-reservations.ts";
 import type { Reservation } from "../types/api.ts";
 import ErrorAlert from "./ErrorAlert.tsx";
 import styles from "./UserReservations.module.css";
@@ -17,15 +16,8 @@ const formatDateTime = (isoValue: string): string => {
 };
 
 const UserReservations = ({ userId, refreshKey }: UserReservationsProps): ReactElement => {
-  const { data: reservations, isLoading, error, reload } = useUserReservations(userId, refreshKey);
-  const { cancellingId, error: cancelError, cancel } = useCancelReservation();
-
-  const handleCancel = async (reservationId: string): Promise<void> => {
-    const isCancelled: boolean = await cancel(reservationId);
-    if (isCancelled) {
-      reload();
-    }
-  };
+  const { reservations, isLoading, error, cancellingId, cancelError, reload, cancel } =
+    useReservations(userId, refreshKey);
 
   return (
     <section className={styles["section"]} aria-busy={isLoading}>
@@ -59,7 +51,7 @@ const UserReservations = ({ userId, refreshKey }: UserReservationsProps): ReactE
               type="button"
               disabled={cancellingId !== null}
               onClick={(): void => {
-                void handleCancel(reservation.id);
+                void cancel(reservation.id);
               }}
             >
               {cancellingId === reservation.id ? "Cancelling..." : "Cancel reservation"}

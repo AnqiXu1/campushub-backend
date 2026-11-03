@@ -4,41 +4,10 @@
  */
 import type { NextFunction, Request, Response } from "express";
 
-import { badRequest } from "../errors/http-error.ts";
 import { listResources as listResourcesFromCatalogue } from "../services/resource.service.ts";
-import type { SuccessResponse } from "../types/api.ts";
 import type { ListResourcesQuery, Resource } from "../types/resource.ts";
-
-/**
- * Accepts an absent parameter, rejects a present-but-empty one. This mirrors
- * `minLength: 1` on the optional `type` query parameter in docs/openapi.yaml.
- */
-const parseOptionalStringParam = (value: unknown, field: string): string | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "string" || value.trim() === "") {
-    throw badRequest(`${field} must be a non-empty string when provided.`, "VALIDATION_ERROR");
-  }
-  return value.trim();
-};
-
-/**
- * Accepts an absent parameter, or the exact strings "true" / "false".
- * Anything else is rejected, matching the boolean schema in docs/openapi.yaml.
- */
-const parseOptionalBooleanParam = (value: unknown, field: string): boolean | undefined => {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === "true") {
-    return true;
-  }
-  if (value === "false") {
-    return false;
-  }
-  throw badRequest(`${field} must be either "true" or "false" when provided.`, "VALIDATION_ERROR");
-};
+import { parseOptionalBooleanParam, parseOptionalStringParam } from "./request-parsers.ts";
+import { sendSuccess } from "./send-success.ts";
 
 const parseListResourcesQuery = (query: Request["query"]): ListResourcesQuery => {
   return {
@@ -55,6 +24,5 @@ export const listResources = async (
 ): Promise<void> => {
   const query: ListResourcesQuery = parseListResourcesQuery(req.query);
   const resources: readonly Resource[] = await listResourcesFromCatalogue(query);
-  const body: SuccessResponse<readonly Resource[]> = { success: true, data: resources };
-  res.status(200).json(body);
+  sendSuccess(res, 200, resources);
 };

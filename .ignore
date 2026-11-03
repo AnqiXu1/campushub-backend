@@ -1,0 +1,15 @@
+# Read by ripgrep (the search backend of most coding agents) in addition to .gitignore.
+# Keeps agents on source files only.
+dist/
+client/dist/
+build/
+coverage/
+node_modules/
+client/node_modules/
+package-lock.json
+client/package-lock.json
+*.log
+logs/
+*.map
+*.tsbuildinfo
+docs/lab4-steering-log.md

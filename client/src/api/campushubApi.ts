@@ -4,11 +4,11 @@
  * or rejects with an ApiError carrying the HTTP status and the error code.
  */
 import type {
-  CreateReservationDTO,
-  ErrorEnvelope,
+  CreateReservationDto,
+  ErrorResponse,
   Reservation,
   Resource,
-  SuccessEnvelope,
+  SuccessResponse,
 } from "../types/api.ts";
 
 const API_BASE_URL: string = "/api/v1";
@@ -37,7 +37,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === "object" && value !== null;
 };
 
-const isErrorEnvelope = (value: unknown): value is ErrorEnvelope => {
+const isErrorResponse = (value: unknown): value is ErrorResponse => {
   if (!isRecord(value) || value["success"] !== false) {
     return false;
   }
@@ -47,7 +47,7 @@ const isErrorEnvelope = (value: unknown): value is ErrorEnvelope => {
   );
 };
 
-const isSuccessEnvelope = <TData>(value: unknown): value is SuccessEnvelope<TData> => {
+const isSuccessResponse = <TData>(value: unknown): value is SuccessResponse<TData> => {
   return isRecord(value) && value["success"] === true && "data" in value;
 };
 
@@ -80,7 +80,7 @@ const request = async <TData>(
   const body: unknown = await parseBody(response);
 
   if (!response.ok) {
-    if (isErrorEnvelope(body)) {
+    if (isErrorResponse(body)) {
       throw new ApiError(response.status, body.error.code, body.error.message);
     }
     throw new ApiError(
@@ -89,7 +89,7 @@ const request = async <TData>(
       `The server responded with status ${response.status}.`,
     );
   }
-  if (!isSuccessEnvelope<TData>(body)) {
+  if (!isSuccessResponse<TData>(body)) {
     throw new ApiError(
       response.status,
       INVALID_RESPONSE_CODE,
@@ -111,7 +111,7 @@ export const fetchResources = async (
 
 /** POST /reservations - books a resource; rejects with status 409 on a conflict. */
 export const createReservation = async (
-  payload: CreateReservationDTO,
+  payload: CreateReservationDto,
   options: RequestOptions = {},
 ): Promise<Reservation> => {
   return request<Reservation>(
