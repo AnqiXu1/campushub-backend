@@ -1,0 +1,16 @@
+{
+  // Used by ts-jest and by `npm run typecheck:test`. Same strictness as tsconfig.json;
+  // only emit-related options differ, because Jest resolves `.ts` specifiers directly.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "rewriteRelativeImportExtensions": false,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
