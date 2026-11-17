@@ -122,6 +122,20 @@ const extractText = (payload: unknown): string => {
   throw new Error("The model response contained no message content.");
 };
 
+const MAX_ERROR_BODY_CHARS: number = 300;
+
+/** Parses JSON safely; the error names the failing stage and quotes a short body excerpt. */
+const parseJson = (raw: string, stage: string): unknown => {
+  const trimmed: string = raw.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch (error: unknown) {
+    const excerpt: string = trimmed.slice(0, MAX_ERROR_BODY_CHARS);
+    const reason: string = error instanceof Error ? error.message : "unknown parse error";
+    throw new Error(`${stage} is not valid JSON (${reason}). Body excerpt: "${excerpt}"`);
+  }
+};
+
 const askModel = async (token: string, model: string, prompt: string): Promise<AgentResponse> => {
   const response: Response = await fetch(API_URL, {
     method: "POST",
@@ -137,16 +151,19 @@ const askModel = async (token: string, model: string, prompt: string): Promise<A
       messages: [{ role: "user", content: prompt }],
     }),
   });
+  const body: string = await response.text();
   if (!response.ok) {
-    throw new Error(`GitHub Models request failed with status ${response.status}.`);
+    throw new Error(
+      `GitHub Models request failed with status ${response.status}: ${body.slice(0, MAX_ERROR_BODY_CHARS)}`,
+    );
   }
-  const text: string = extractText(await response.json());
+  const text: string = extractText(parseJson(body, "API response"));
   const start: number = text.indexOf("{");
   const end: number = text.lastIndexOf("}");
   if (start === -1 || end <= start) {
     throw new Error("The model response did not contain a JSON object.");
   }
-  const parsed: unknown = JSON.parse(text.slice(start, end + 1));
+  const parsed: unknown = parseJson(text.slice(start, end + 1), "Model output");
   if (!isAgentResponse(parsed)) {
     throw new Error("The model response did not match the expected shape.");
   }
