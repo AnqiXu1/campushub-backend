@@ -57,8 +57,8 @@ export const createReservation = async (input: CreateReservationDto): Promise<Re
   const clashing: Pick<IReservation, "_id"> | null = await ReservationModel.exists({
     resourceId: resourceObjectId,
     status: { $in: ACTIVE_STATUSES },
-    startTime: { $lt: endTime },
-    endTime: { $gt: startTime },
+    startTime: { $gt: endTime },
+    endTime: { $lt: startTime },
   });
   if (clashing !== null) {
     throw conflict("Resource is already reserved for this time slot.", "DOUBLE_BOOKING");
