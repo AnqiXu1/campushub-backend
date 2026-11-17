@@ -1,21 +1,22 @@
 /**
  * Auto-heal agent runner, executed by the `auto-fix` job in .github/workflows/ci.yml.
  *
- * Reads the Jest failure log, gathers the implicated source files, asks the
- * Anthropic Messages API for a fix, and writes the patched files back to disk.
- * Uses only Node built-ins and the native fetch API (no SDK dependency).
+ * Reads the Jest failure log, gathers the implicated source files, asks a
+ * GitHub Models chat model for a fix, and writes the patched files back to disk.
+ * Uses only Node built-ins and the native fetch API authenticated with the workflow's built-in GITHUB_TOKEN (no SDK, no external secret).
  *
  * Usage: node src/scripts/auto-heal.ts <test-results.log> <summary-output.md>
- * Environment: ANTHROPIC_API_KEY (required), AUTO_HEAL_MODEL (optional).
+ * Environment: GITHUB_TOKEN (required, needs models: read), AUTO_HEAL_MODEL (optional).
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
-const DEFAULT_MODEL: string = "claude-sonnet-5-5";
-const API_URL: string = "https://api.anthropic.com/v1/messages";
-const API_VERSION: string = "2023-06-01";
-const MAX_LOG_CHARS: number = 30000;
-const MAX_TOKENS: number = 16000;
+const DEFAULT_MODEL: string = "openai/gpt-4.1";
+const API_URL: string = "https://models.github.ai/inference/chat/completions";
+const API_VERSION: string = "2022-11-28";
+// GitHub Models free tier caps input and output tokens, so keep the prompt compact.
+const MAX_LOG_CHARS: number = 6000;
+const MAX_TOKENS: number = 4000;
 
 const INSTRUCTION: string =
   "Parse the attached Jest failure log. Locate the source code causing the failure in src/ " +
@@ -111,23 +112,24 @@ const buildPrompt = (log: string, contexts: readonly FileContext[]): string => {
 };
 
 const extractText = (payload: unknown): string => {
-  if (isRecord(payload) && Array.isArray(payload["content"])) {
-    for (const block of payload["content"]) {
-      if (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string") {
-        return block["text"];
-      }
+  if (isRecord(payload) && Array.isArray(payload["choices"])) {
+    const first: unknown = payload["choices"][0];
+    const message: unknown = isRecord(first) ? first["message"] : undefined;
+    if (isRecord(message) && typeof message["content"] === "string") {
+      return message["content"];
     }
   }
-  throw new Error("The model response contained no text block.");
+  throw new Error("The model response contained no message content.");
 };
 
-const askModel = async (apiKey: string, model: string, prompt: string): Promise<AgentResponse> => {
+const askModel = async (token: string, model: string, prompt: string): Promise<AgentResponse> => {
   const response: Response = await fetch(API_URL, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": API_VERSION,
+      accept: "application/vnd.github+json",
+      authorization: `Bearer ${token}`,
+      "x-github-api-version": API_VERSION,
     },
     body: JSON.stringify({
       model,
@@ -136,7 +138,7 @@ const askModel = async (apiKey: string, model: string, prompt: string): Promise<
     }),
   });
   if (!response.ok) {
-    throw new Error(`Anthropic API request failed with status ${response.status}.`);
+    throw new Error(`GitHub Models request failed with status ${response.status}.`);
   }
   const text: string = extractText(await response.json());
   const start: number = text.indexOf("{");
@@ -153,23 +155,23 @@ const askModel = async (apiKey: string, model: string, prompt: string): Promise<
 
 const main = async (): Promise<void> => {
   const [logPath, summaryPath] = process.argv.slice(2);
-  const apiKey: string | undefined = process.env["ANTHROPIC_API_KEY"];
+  const token: string | undefined = process.env["GITHUB_TOKEN"];
   if (logPath === undefined || summaryPath === undefined) {
     throw new Error("Usage: auto-heal.ts <test-results.log> <summary-output.md>");
   }
-  if (apiKey === undefined || apiKey === "") {
-    throw new Error("ANTHROPIC_API_KEY is not set.");
+  if (token === undefined || token === "") {
+    throw new Error("GITHUB_TOKEN is not set.");
   }
   const model: string = process.env["AUTO_HEAL_MODEL"] || DEFAULT_MODEL;
 
   const fullLog: string = await readFile(logPath, "utf8");
-  const log: string = fullLog.length > MAX_LOG_CHARS ? fullLog.slice(-MAX_LOG_CHARS) : fullLog;
+  const log: string = fullLog.length > MAX_LOG_CHARS ? fullLog.slice(0, MAX_LOG_CHARS) : fullLog;
   const contexts: readonly FileContext[] = await readContext(findCandidatePaths(fullLog));
   if (contexts.length === 0) {
     throw new Error("No source files could be identified from the failure log.");
   }
 
-  const result: AgentResponse = await askModel(apiKey, model, buildPrompt(log, contexts));
+  const result: AgentResponse = await askModel(token, model, buildPrompt(log, contexts));
   const rejected: readonly FilePatch[] = result.files.filter((file) => !isPatchablePath(file.path));
   if (rejected.length > 0) {
     throw new Error(

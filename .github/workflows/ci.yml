@@ -49,6 +49,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      models: read
     env:
       HEAD_REF: ${{ github.head_ref }}
       PATCH_BRANCH: fix/auto-heal-${{ github.run_id }}
@@ -65,9 +66,9 @@ jobs:
         with:
           name: test-results
       - run: npm ci
-      - name: Generate patch with the AI agent
+      - name: Generate patch with GitHub Models
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node src/scripts/auto-heal.ts test-results.log "$RUNNER_TEMP/agent-summary.md"
       - name: Verify the patch restores the test suite
         run: npm run lint && npm test
