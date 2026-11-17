@@ -9,6 +9,7 @@
     "build": "rm -rf dist && tsc",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "typecheck": "tsc --noEmit",
+    "lint": "prettier --check src && tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "typecheck:test": "tsc -p tsconfig.test.json"
